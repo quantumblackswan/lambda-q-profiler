@@ -149,13 +149,19 @@ The **cultivation threshold** (p < 2.3×10⁻³) comes from [Gupta et al., Natur
 
 ## Built-In Processor Profiles
 
-| Processor | Qubits | T1 (μs) | T2 (μs) | 2Q Error | Lambda-Q |
-|-----------|--------|---------|---------|----------|----------|
-| IBM Fez (Eagle r3) | 156 | 263 | 152 | 5.2e-3 | 1.000 |
-| IBM Torino (Heron r1) | 133 | 290 | 175 | 4.8e-3 | ~1.05 |
-| IBM Marrakesh (Eagle r3) | 156 | 250 | 140 | 6.1e-3 | ~0.97 |
-| Google Willow | 105 | 60 | 25 | 2.3e-3 | ~0.73 |
-| Noisy baseline | 27 | 50 | 20 | 2.5e-2 | ~0.57 |
+| Processor | Type | Qubits | T1 (μs) | T2 (μs) | 2Q Error | Lambda-Q |
+|-----------|------|--------|---------|---------|----------|----------|
+| IBM Fez (Eagle r3) | SC | 156 | 263 | 152 | 5.2e-3 | 1.000 |
+| IBM Torino (Heron r1) | SC | 133 | 290 | 175 | 4.8e-3 | ~1.05 |
+| IBM Marrakesh (Eagle r3) | SC | 156 | 250 | 140 | 6.1e-3 | ~0.97 |
+| Google Willow | SC | 105 | 60 | 25 | 2.3e-3 | ~0.73 |
+| **IonQ Forte** | **Ion** | 36 | 10⁷ | 10⁶ | 4.0e-3 | ~1.04 |
+| **IonQ Aria** | **Ion** | 25 | 10⁷ | 5×10⁵ | 5.0e-3 | ~1.02 |
+| **Quantinuum H2** | **Ion** | 56 | 3×10⁷ | 2×10⁶ | 1.0e-3 | ~1.10 |
+| **Rigetti Ankaa-3** | **SC** | 84 | 25 | 18 | 1.5e-2 | ~0.62 |
+| Noisy baseline | SC | 27 | 50 | 20 | 2.5e-2 | ~0.57 |
+
+*SC = superconducting transmon, Ion = trapped ion*
 
 ## Probe Circuits
 

@@ -1,9 +1,11 @@
 """
 Simulated quantum processor calibration profiles.
 
-All values are drawn from publicly available IBM Quantum and Google
-calibration dashboards (as of early 2026). These profiles let users
-run the profiler locally without backend access.
+All values are drawn from publicly available vendor datasheets,
+calibration dashboards, and published papers (as of early 2026).
+Covers superconducting (IBM, Google, Rigetti), trapped-ion (IonQ,
+Quantinuum), and noisy-baseline architectures. These profiles let
+users run the profiler locally without backend access.
 
 Copyright 2026 Kevin Henry Miller / Q-Bond Network DeSCI DAO, LLC
 Licensed under the Apache License, Version 2.0
@@ -57,6 +59,68 @@ GOOGLE_WILLOW_PROFILE: Dict = {
     "readout_error": {"mean": 5.0e-3, "std": 2.0e-3},
 }
 
+# ---------------------------------------------------------------------------
+# Trapped-ion processors (published specs / vendor datasheets)
+# ---------------------------------------------------------------------------
+
+# IonQ Forte (2025): 36 algorithmic qubits, #AQ 36
+# Sources: IonQ system specifications (ionq.com), published benchmarks
+IONQ_FORTE_PROFILE: Dict = {
+    "name": "ionq_forte",
+    "n_qubits": 36,
+    "t1_us": {"mean": 1.0e7, "std": 2.0e6},       # ~10 seconds (trapped ion)
+    "t2_us": {"mean": 1.0e6, "std": 3.0e5},       # ~1 second
+    "error_1q": {"mean": 3.0e-4, "std": 1.5e-4},  # ~99.97% fidelity
+    "error_2q": {"mean": 4.0e-3, "std": 1.5e-3},  # ~99.6% fidelity
+    "readout_error": {"mean": 3.0e-3, "std": 1.0e-3},  # ~99.7%
+    "connectivity": "all-to-all",
+}
+
+# IonQ Aria (2024): 25 algorithmic qubits, #AQ 25
+IONQ_ARIA_PROFILE: Dict = {
+    "name": "ionq_aria",
+    "n_qubits": 25,
+    "t1_us": {"mean": 1.0e7, "std": 2.0e6},       # ~10 seconds
+    "t2_us": {"mean": 5.0e5, "std": 1.5e5},       # ~0.5 seconds
+    "error_1q": {"mean": 4.0e-4, "std": 2.0e-4},  # ~99.96%
+    "error_2q": {"mean": 5.0e-3, "std": 2.0e-3},  # ~99.5%
+    "readout_error": {"mean": 4.0e-3, "std": 1.5e-3},  # ~99.6%
+    "connectivity": "all-to-all",
+}
+
+# Quantinuum H2 (2025): 56 qubits, QCCD architecture
+# Sources: Quantinuum system model H2 datasheet, published papers
+QUANTINUUM_H2_PROFILE: Dict = {
+    "name": "quantinuum_h2",
+    "n_qubits": 56,
+    "t1_us": {"mean": 3.0e7, "std": 5.0e6},       # ~30 seconds
+    "t2_us": {"mean": 2.0e6, "std": 5.0e5},       # ~2 seconds
+    "error_1q": {"mean": 2.0e-5, "std": 1.0e-5},  # ~99.998%
+    "error_2q": {"mean": 1.0e-3, "std": 5.0e-4},  # ~99.9% (best in class)
+    "readout_error": {"mean": 3.0e-3, "std": 1.0e-3},  # ~99.7%
+    "connectivity": "all-to-all",  # QCCD shuttling
+}
+
+# ---------------------------------------------------------------------------
+# Superconducting (non-IBM)
+# ---------------------------------------------------------------------------
+
+# Rigetti Ankaa-3 (2025): 84 qubits, tunable transmon
+# Sources: Rigetti QPU specifications, AWS Braket benchmarks
+RIGETTI_ANKAA3_PROFILE: Dict = {
+    "name": "rigetti_ankaa3",
+    "n_qubits": 84,
+    "t1_us": {"mean": 25.0, "std": 8.0},
+    "t2_us": {"mean": 18.0, "std": 6.0},
+    "error_1q": {"mean": 4.0e-3, "std": 2.0e-3},  # ~99.6%
+    "error_2q": {"mean": 1.5e-2, "std": 5.0e-3},  # ~98.5% (iSWAP native)
+    "readout_error": {"mean": 1.0e-2, "std": 4.0e-3},
+}
+
+# ---------------------------------------------------------------------------
+# Noisy baseline (for contrast)
+# ---------------------------------------------------------------------------
+
 NOISY_PROCESSOR_PROFILE: Dict = {
     "name": "noisy_processor",
     "n_qubits": 27,
@@ -72,6 +136,10 @@ ALL_PROFILES = [
     IBM_TORINO_PROFILE,
     IBM_MARRAKESH_PROFILE,
     GOOGLE_WILLOW_PROFILE,
+    IONQ_FORTE_PROFILE,
+    IONQ_ARIA_PROFILE,
+    QUANTINUUM_H2_PROFILE,
+    RIGETTI_ANKAA3_PROFILE,
     NOISY_PROCESSOR_PROFILE,
 ]
 
@@ -103,14 +171,18 @@ def generate_simulated_calibration(profile: Dict,
     rng = np.random.default_rng(seed)
     n_q = n_sample if n_sample > 0 else min(profile["n_qubits"], 20)
 
+    # Clip ranges adapt to technology (trapped ions have T1 in seconds)
+    t1_max = max(profile["t1_us"]["mean"] * 2.0, 1000.0)
+    t2_max = max(profile["t2_us"]["mean"] * 2.0, 500.0)
+
     t1 = np.clip(
         rng.normal(profile["t1_us"]["mean"], profile["t1_us"]["std"], n_q),
-        10.0, 1000.0,
+        10.0, t1_max,
     ).tolist()
 
     t2_raw = rng.normal(profile["t2_us"]["mean"], profile["t2_us"]["std"], n_q)
     t2 = [min(float(t2_raw[i]), 2 * t1[i]) for i in range(n_q)]
-    t2 = np.clip(t2, 5.0, 500.0).tolist()
+    t2 = np.clip(t2, 5.0, t2_max).tolist()
 
     e1q = np.clip(
         rng.normal(profile["error_1q"]["mean"], profile["error_1q"]["std"], n_q),
@@ -131,16 +203,29 @@ def generate_simulated_calibration(profile: Dict,
         1e-4, 0.3,
     ).tolist()
 
-    # Linear nearest-neighbour edges
+    # Connectivity: all-to-all for trapped ions, linear for others
+    is_all_to_all = profile.get("connectivity") == "all-to-all"
     edges = {}
-    for i in range(n_q - 1):
-        edge_err = float(
-            np.clip(
-                np.sqrt(e2q[i] * e2q[i + 1]) * rng.uniform(0.8, 1.2),
-                1e-4, 0.5,
+    if is_all_to_all:
+        for i in range(n_q):
+            for j in range(i + 1, n_q):
+                edge_err = float(
+                    np.clip(
+                        np.sqrt(e2q[i] * e2q[j]) * rng.uniform(0.8, 1.2),
+                        1e-4, 0.5,
+                    )
+                )
+                edges[(i, j)] = edge_err
+    else:
+        # Linear nearest-neighbour edges
+        for i in range(n_q - 1):
+            edge_err = float(
+                np.clip(
+                    np.sqrt(e2q[i] * e2q[i + 1]) * rng.uniform(0.8, 1.2),
+                    1e-4, 0.5,
+                )
             )
-        )
-        edges[(i, i + 1)] = edge_err
+            edges[(i, i + 1)] = edge_err
 
     return {
         "name": profile["name"],

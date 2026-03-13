@@ -12,7 +12,12 @@ from lambda_q_profiler.core import (
 from lambda_q_profiler.profiles import (
     IBM_FEZ_PROFILE,
     GOOGLE_WILLOW_PROFILE,
+    IONQ_FORTE_PROFILE,
+    IONQ_ARIA_PROFILE,
+    QUANTINUUM_H2_PROFILE,
+    RIGETTI_ANKAA3_PROFILE,
     NOISY_PROCESSOR_PROFILE,
+    ALL_PROFILES,
     generate_simulated_calibration,
 )
 from lambda_q_profiler.probes import (
@@ -163,6 +168,37 @@ class TestProfiles:
     def test_edges_exist(self):
         cal = generate_simulated_calibration(IBM_FEZ_PROFILE, n_sample=10)
         assert len(cal["edges"]) == 9  # n-1 edges for n qubits
+
+    def test_all_to_all_edges_for_trapped_ion(self):
+        """Trapped-ion profiles should generate all-to-all edges."""
+        cal = generate_simulated_calibration(IONQ_FORTE_PROFILE, n_sample=6)
+        # All-to-all: C(6,2) = 15 edges
+        assert len(cal["edges"]) == 15
+
+    def test_ionq_forte_high_t1(self):
+        """IonQ Forte T1 values should be in the millions of microseconds."""
+        cal = generate_simulated_calibration(IONQ_FORTE_PROFILE, n_sample=5)
+        for t1 in cal["t1_us"]:
+            assert t1 > 1e6  # > 1 second
+
+    def test_quantinuum_h2_low_2q_error(self):
+        """Quantinuum H2 should have very low 2Q gate errors."""
+        cal = generate_simulated_calibration(QUANTINUUM_H2_PROFILE, n_sample=10)
+        mean_err = np.mean(cal["error_2q"])
+        assert mean_err < 3e-3  # well below superconducting
+
+    def test_all_profiles_generate_valid_calibration(self):
+        """Every profile in ALL_PROFILES should produce valid calibration."""
+        for prof in ALL_PROFILES:
+            cal = generate_simulated_calibration(prof, n_sample=5)
+            assert cal["n_qubits"] == 5
+            assert len(cal["t1_us"]) == 5
+            assert len(cal["edges"]) > 0
+
+    def test_rigetti_linear_edges(self):
+        """Rigetti (no all-to-all) should have linear edges."""
+        cal = generate_simulated_calibration(RIGETTI_ANKAA3_PROFILE, n_sample=8)
+        assert len(cal["edges"]) == 7  # n-1 for linear
 
 
 # -----------------------------------------------------------------
