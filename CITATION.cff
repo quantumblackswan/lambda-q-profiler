@@ -1,0 +1,77 @@
+cff-version: 1.2.0
+title: "Lambda-Q Noise Profiler: Quantum Processor Characterization via Information-Geometric Noise Coefficients"
+message: "If you use this software, please cite it as below."
+type: software
+authors:
+  - given-names: Kevin Henry
+    family-names: Miller
+    affiliation: "Q-Bond Network DeSCI DAO, LLC"
+    orcid: ""
+repository-code: "https://github.com/quantumblackswan/lambda-q-profiler"
+url: "https://github.com/quantumblackswan/lambda-q-profiler"
+license: Apache-2.0
+version: "1.0.0"
+date-released: "2026-03-12"
+keywords:
+  - quantum computing
+  - noise characterization
+  - quantum error correction
+  - quantum geometric tensor
+  - quantum Fisher information
+  - magic state cultivation
+  - quantum processor benchmarking
+  - dynamical decoupling
+abstract: >-
+  Lambda-Q Noise Profiler is an open-source toolkit for characterizing
+  quantum processor noise through information-geometric coefficients.
+  It computes per-qubit and per-edge Lambda-Q scores derived from
+  quantum geometric tensor (QGT) principles, grades qubits by quality
+  tier, and predicts magic state cultivation readiness against published
+  error thresholds. The tool works with both real IBM Quantum backends
+  (via Qiskit) and simulated processor profiles.
+references:
+  - type: article
+    authors:
+      - family-names: "Google Quantum AI"
+    title: "Quantum error correction below the surface code threshold"
+    journal: "Nature"
+    year: 2025
+    doi: "10.1038/s41586-024-08449-y"
+    notes: "Surface code threshold and physical error rate benchmarks"
+  - type: article
+    authors:
+      - family-names: Gupta
+        given-names: R. S.
+      - family-names: Sundaresan
+        given-names: N.
+      - family-names: Alexander
+        given-names: T.
+    title: "Encoding a magic state with beyond break-even fidelity"
+    journal: "Nature"
+    year: 2025
+    doi: "10.1038/s41586-024-08436-x"
+    notes: "Magic state cultivation threshold p < 2.3e-3"
+  - type: article
+    authors:
+      - family-names: Provost
+        given-names: J. P.
+      - family-names: Vallee
+        given-names: G.
+    title: "Riemannian structure on manifolds of quantum states"
+    journal: "Communications in Mathematical Physics"
+    year: 1980
+    volume: 76
+    pages: "289-301"
+    notes: "Quantum geometric tensor (QGT) foundational reference"
+  - type: article
+    authors:
+      - family-names: Braunstein
+        given-names: S. L.
+      - family-names: Caves
+        given-names: C. M.
+    title: "Statistical distance and the geometry of quantum states"
+    journal: "Physical Review Letters"
+    year: 1994
+    volume: 72
+    pages: "3439-3443"
+    notes: "Quantum Fisher information and statistical distinguishability"

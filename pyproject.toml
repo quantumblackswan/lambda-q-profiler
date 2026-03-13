@@ -1,0 +1,69 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lambda-q-profiler"
+version = "1.0.0"
+description = "Quantum processor characterization via information-geometric noise coefficients (Lambda-Q)"
+readme = "README.md"
+license = {text = "Apache-2.0"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Kevin Henry Miller", email = "kevin@qbondnetwork.com"},
+]
+maintainers = [
+    {name = "Kevin Henry Miller", email = "kevin@qbondnetwork.com"},
+]
+keywords = [
+    "quantum computing",
+    "noise characterization",
+    "quantum error correction",
+    "quantum geometric tensor",
+    "quantum Fisher information",
+    "benchmarking",
+    "qiskit",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy>=1.24",
+    "qiskit>=1.0",
+]
+
+[project.optional-dependencies]
+ibm = ["qiskit-ibm-runtime>=0.20"]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+lambda-q-profiler = "lambda_q_profiler.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/quantumblackswan/lambda-q-profiler"
+Repository = "https://github.com/quantumblackswan/lambda-q-profiler"
+Documentation = "https://github.com/quantumblackswan/lambda-q-profiler#readme"
+Issues = "https://github.com/quantumblackswan/lambda-q-profiler/issues"
+
+[tool.setuptools.packages.find]
+include = ["lambda_q_profiler*"]
+
+[tool.ruff]
+line-length = 88
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
