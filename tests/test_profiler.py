@@ -6,8 +6,13 @@ import pytest
 from lambda_q_profiler.core import (
     compute_lambda_q,
     compute_lambda_q_from_measurements,
+    compute_curvature_neighbors,
     grade_qubits,
     profile_processor,
+    CULTIVATION_LAMBDA_Q_THRESHOLD,
+    FLOQUET_THRESHOLD,
+    CULTIVATION_THRESHOLD,
+    SURFACE_CODE_THRESHOLD,
 )
 from lambda_q_profiler.profiles import (
     IBM_FEZ_PROFILE,
@@ -79,7 +84,9 @@ class TestComputeLambdaQ:
             "lambda_q", "lambda_q_raw", "delta_psi_sq", "tau_us",
             "eta", "gamma_per_us", "t1_us", "t2_us", "t2_quality",
             "p_noise", "cultivation_threshold", "surface_code_threshold",
-            "cultivation_ready", "qec_ready",
+            "cultivation_lambda_q_threshold", "floquet_threshold",
+            "cultivation_ready", "cultivation_lambda_q_ready",
+            "floquet_ready", "qec_ready",
         }
         assert expected_keys.issubset(r.keys())
 
@@ -251,3 +258,200 @@ class TestProfileProcessor:
         result = profile_processor()
         # With 5 profiles, correlation should be computed
         assert result["predictive_correlation"] is not None
+
+    def test_output_includes_new_thresholds(self):
+        result = profile_processor(profiles=[IBM_FEZ_PROFILE])
+        assert "cultivation_lambda_q_threshold" in result
+        assert "floquet_threshold" in result
+        assert result["cultivation_lambda_q_threshold"] == CULTIVATION_LAMBDA_Q_THRESHOLD
+        assert result["floquet_threshold"] == FLOQUET_THRESHOLD
+
+    def test_summary_rows_include_floquet_ready(self):
+        result = profile_processor(
+            profiles=[IBM_FEZ_PROFILE, NOISY_PROCESSOR_PROFILE],
+        )
+        for row in result["cross_comparison"]:
+            assert "floquet_ready" in row
+            assert isinstance(row["floquet_ready"], bool)
+
+
+# -----------------------------------------------------------------
+# New v1.1.0 features: Cultivation Lambda-Q, Floquet, Curvature
+# -----------------------------------------------------------------
+
+class TestCultivationLambdaQThreshold:
+    """Tests for Lambda-Q cultivation threshold (arXiv:2512.13908)."""
+
+    def test_threshold_constant_is_correct(self):
+        assert CULTIVATION_LAMBDA_Q_THRESHOLD == 0.75
+
+    def test_cultivation_lambda_q_ready_is_bool(self):
+        r = compute_lambda_q(
+            t1_us=60.0, t2_us=25.0,
+            error_1q=5e-4, error_2q=2.3e-3, readout_error=5e-3,
+        )
+        assert isinstance(r["cultivation_lambda_q_ready"], bool)
+
+    def test_high_lambda_q_is_cultivation_lq_ready(self):
+        """Quantinuum H2-class specs have lambda_q >> 0.75."""
+        r = compute_lambda_q(
+            t1_us=3e7, t2_us=2e6,
+            error_1q=2e-5, error_2q=1e-3, readout_error=3e-3,
+        )
+        assert r["cultivation_lambda_q_ready"] is True
+
+    def test_low_lambda_q_not_cultivation_lq_ready(self):
+        """Noisy processor has lambda_q < 0.75."""
+        r = compute_lambda_q(
+            t1_us=50.0, t2_us=20.0,
+            error_1q=2e-3, error_2q=2.5e-2, readout_error=3e-2,
+        )
+        assert r["cultivation_lambda_q_ready"] is False
+
+    def test_cultivation_ready_requires_both_conditions(self):
+        """cultivation_ready = p_noise < threshold AND lambda_q >= 0.75."""
+        # High lambda_q but high p_noise → not cultivation_ready
+        r_high_noise = compute_lambda_q(
+            t1_us=3e7, t2_us=2e6,
+            error_1q=2e-5, error_2q=1.5e-2, readout_error=3e-3,
+        )
+        # p_noise is high here, so not cultivation_ready
+        assert r_high_noise["cultivation_ready"] is False
+
+    def test_quantinuum_h2_cultivation_ready(self):
+        """Quantinuum H2 should be cultivation-ready (best-in-class)."""
+        r = compute_lambda_q(
+            t1_us=3e7, t2_us=2e6,
+            error_1q=2e-5, error_2q=1e-3, readout_error=3e-3,
+        )
+        # p_noise = 1e-3 + exp_term ≈ 1e-3 < CULTIVATION_THRESHOLD 2.3e-3
+        # AND lambda_q >> 0.75
+        assert r["cultivation_ready"] is True
+
+    def test_willow_near_but_below_cultivation_threshold(self):
+        """Google Willow (p_noise ~ 2.34e-3) is near-but-above the p_noise
+        cultivation threshold, so it is not cultivation_ready despite its
+        lambda_q being above the 0.75 threshold."""
+        r = compute_lambda_q(
+            t1_us=60.0, t2_us=25.0,
+            error_1q=5e-4, error_2q=2.3e-3, readout_error=5e-3,
+        )
+        # Willow lambda_q > 0.75 (lambda_q_ready) but p_noise > 2.3e-3
+        assert r["cultivation_lambda_q_ready"] is True
+        # p_noise is just above cultivation threshold
+        assert r["p_noise"] > CULTIVATION_THRESHOLD
+        assert r["cultivation_ready"] is False
+
+
+class TestFloquetReadiness:
+    """Tests for Floquet code deployment readiness (Haah arXiv:2510.05549)."""
+
+    def test_floquet_threshold_constant(self):
+        assert FLOQUET_THRESHOLD == 1.0e-2
+
+    def test_floquet_threshold_below_surface_code_threshold(self):
+        assert FLOQUET_THRESHOLD <= SURFACE_CODE_THRESHOLD
+
+    def test_floquet_threshold_above_cultivation_threshold(self):
+        assert FLOQUET_THRESHOLD > CULTIVATION_THRESHOLD
+
+    def test_floquet_ready_is_bool(self):
+        r = compute_lambda_q(
+            t1_us=263.0, t2_us=152.0,
+            error_1q=2.6e-4, error_2q=5.2e-3, readout_error=7.5e-3,
+        )
+        assert isinstance(r["floquet_ready"], bool)
+
+    def test_low_noise_processor_floquet_ready(self):
+        """A processor with p_noise well below 1e-2 is Floquet-ready."""
+        r = compute_lambda_q(
+            t1_us=3e7, t2_us=2e6,
+            error_1q=2e-5, error_2q=1e-3, readout_error=3e-3,
+        )
+        assert r["floquet_ready"] is True
+
+    def test_noisy_processor_not_floquet_ready(self):
+        """A noisy processor with high p_noise is not Floquet-ready."""
+        r = compute_lambda_q(
+            t1_us=50.0, t2_us=20.0,
+            error_1q=2e-3, error_2q=2.5e-2, readout_error=3e-2,
+        )
+        assert r["floquet_ready"] is False
+
+    def test_floquet_ready_in_measurements_output(self):
+        r = compute_lambda_q_from_measurements(
+            t2_measured=200.0,
+            cx_fidelity=0.998,
+            ro_error_0=0.005,
+            ro_error_1=0.005,
+            ghz_fidelity=0.95,
+            state_variance=0.25,
+        )
+        assert "floquet_ready" in r
+        assert isinstance(r["floquet_ready"], bool)
+
+
+class TestCurvedNeighbors:
+    """Tests for information-curvature neighbor topology (arXiv:2512.12578)."""
+
+    def test_returns_dict_keyed_by_qubit(self):
+        qubit_lq = [1.0, 0.9, 0.8]
+        edges = {(0, 1): 5e-3, (1, 2): 7e-3}
+        cn = compute_curvature_neighbors(qubit_lq, edges)
+        assert set(cn.keys()) == {0, 1, 2}
+
+    def test_neighbors_sorted_by_weight(self):
+        """Higher-quality neighbors should appear first."""
+        qubit_lq = [1.0, 0.9, 0.5, 0.3]
+        edges = {(0, 1): 5e-3, (0, 2): 5e-3, (0, 3): 5e-3}
+        cn = compute_curvature_neighbors(qubit_lq, edges)
+        weights_for_0 = [w for _, w in cn[0]]
+        assert weights_for_0 == sorted(weights_for_0, reverse=True)
+
+    def test_higher_lambda_q_gives_higher_weight(self):
+        """Edge to high-lambda_q qubit must outweigh edge to low one."""
+        qubit_lq = [1.0, 0.9, 0.1]
+        edges = {(0, 1): 5e-3, (0, 2): 5e-3}
+        cn = compute_curvature_neighbors(qubit_lq, edges)
+        neigh_0 = dict(cn[0])
+        assert neigh_0[1] > neigh_0[2]
+
+    def test_all_to_all_curvature_neighbors(self):
+        """All-to-all topology should give every qubit n-1 neighbors."""
+        n = 5
+        qubit_lq = [1.0] * n
+        edges = {(i, j): 5e-3 for i in range(n) for j in range(i + 1, n)}
+        cn = compute_curvature_neighbors(qubit_lq, edges)
+        for q in range(n):
+            assert len(cn[q]) == n - 1
+
+    def test_curvature_neighbors_in_grade_qubits_output(self):
+        """grade_qubits should include curvature_neighbors key."""
+        cal = generate_simulated_calibration(IBM_FEZ_PROFILE, n_sample=5)
+        result = grade_qubits(
+            cal["t1_us"], cal["t2_us"],
+            cal["error_1q"], cal["readout_error"],
+            cal["edges"],
+        )
+        assert "curvature_neighbors" in result
+        cn = result["curvature_neighbors"]
+        assert len(cn) == 5
+        # Every qubit should have at least one neighbor (linear topology)
+        for q in range(5):
+            assert len(cn[q]) >= 1
+
+    def test_isolated_qubit_has_empty_neighbors(self):
+        """A qubit with no edges should have no curvature neighbors."""
+        qubit_lq = [1.0, 0.8, 0.6]
+        edges = {(0, 1): 5e-3}  # qubit 2 is isolated
+        cn = compute_curvature_neighbors(qubit_lq, edges)
+        assert cn[2] == []
+
+    def test_weight_reduced_by_gate_error(self):
+        """Higher 2Q error should lower curvature weight."""
+        qubit_lq = [1.0, 1.0]
+        low_err_edges = {(0, 1): 1e-3}
+        high_err_edges = {(0, 1): 1e-1}
+        cn_low = compute_curvature_neighbors(qubit_lq, low_err_edges)
+        cn_high = compute_curvature_neighbors(qubit_lq, high_err_edges)
+        assert cn_low[0][0][1] > cn_high[0][0][1]

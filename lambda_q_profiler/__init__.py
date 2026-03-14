@@ -10,14 +10,19 @@ Copyright 2026 Kevin Henry Miller / Q-Bond Network DeSCI DAO, LLC
 Licensed under the Apache License, Version 2.0
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "Kevin Henry Miller"
 
 from lambda_q_profiler.core import (
     compute_lambda_q,
     compute_lambda_q_from_measurements,
+    compute_curvature_neighbors,
     grade_qubits,
     profile_processor,
+    CULTIVATION_LAMBDA_Q_THRESHOLD,
+    FLOQUET_THRESHOLD,
+    CULTIVATION_THRESHOLD,
+    SURFACE_CODE_THRESHOLD,
 )
 from lambda_q_profiler.probes import (
     build_t2_ramsey,
@@ -48,8 +53,13 @@ from lambda_q_profiler.kpis import (
 __all__ = [
     "compute_lambda_q",
     "compute_lambda_q_from_measurements",
+    "compute_curvature_neighbors",
     "grade_qubits",
     "profile_processor",
+    "CULTIVATION_LAMBDA_Q_THRESHOLD",
+    "FLOQUET_THRESHOLD",
+    "CULTIVATION_THRESHOLD",
+    "SURFACE_CODE_THRESHOLD",
     "build_t2_ramsey",
     "build_cx_error",
     "build_ghz",
