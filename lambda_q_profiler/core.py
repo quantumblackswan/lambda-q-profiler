@@ -556,7 +556,7 @@ def profile_processor(
     # ---- Build output ----
     output = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "version": "1.1.0",
+        "version": "1.1.1",
         "reference_processor": "ibm_fez (public calibration)",
         "cultivation_threshold": CULTIVATION_THRESHOLD,
         "cultivation_lambda_q_threshold": CULTIVATION_LAMBDA_Q_THRESHOLD,

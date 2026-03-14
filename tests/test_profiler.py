@@ -14,6 +14,15 @@ from lambda_q_profiler.core import (
     CULTIVATION_THRESHOLD,
     SURFACE_CODE_THRESHOLD,
 )
+from lambda_q_profiler.extensions import (
+    build_curvature_adjacency,
+    cultivation_prescreener,
+    floquet_deployment_checklist,
+    full_extension_report,
+    CULTIVATION_LQ_THRESHOLD,
+    FLOQUET_THRESHOLD as FLOQUET_EDGE_THRESHOLD,
+    FLOQUET_MIN_LQ,
+)
 from lambda_q_profiler.profiles import (
     IBM_FEZ_PROFILE,
     GOOGLE_WILLOW_PROFILE,
@@ -455,3 +464,172 @@ class TestCurvedNeighbors:
         cn_low = compute_curvature_neighbors(qubit_lq, low_err_edges)
         cn_high = compute_curvature_neighbors(qubit_lq, high_err_edges)
         assert cn_low[0][0][1] > cn_high[0][0][1]
+
+
+# -----------------------------------------------------------------
+# v1.1.1 Extensions
+# -----------------------------------------------------------------
+
+_SAMPLE_LQ = [0.95, 0.88, 1.02, 0.45]          # 4 qubits
+_SAMPLE_GRADES = ["A", "B", "A", "F"]
+_SAMPLE_EDGES = {(0, 1): 2.0e-3, (1, 2): 1.8e-3, (2, 3): 8.0e-3}
+
+
+class TestQEMAdjacency:
+    """Tests for build_curvature_adjacency (arXiv:2512.12578)."""
+
+    def test_returns_expected_keys(self):
+        result = build_curvature_adjacency(_SAMPLE_LQ, _SAMPLE_EDGES)
+        for key in ("adjacency", "max_weight_edge", "min_weight_edge",
+                    "avg_weight", "qem_routing", "improvement_ratio"):
+            assert key in result
+
+    def test_high_fidelity_edge_has_higher_weight(self):
+        """Edge (1,2) has lower error than (0,1); should have >= weight."""
+        result = build_curvature_adjacency(_SAMPLE_LQ, _SAMPLE_EDGES)
+        adj = result["adjacency"]
+        assert adj["1-2"] >= adj["0-1"] * 0.9  # within 10% (lq values differ)
+
+    def test_f_grade_endpoint_reduces_edge_weight(self):
+        """Edge (2,3) has an F-grade qubit at q3 → lowest weight."""
+        result = build_curvature_adjacency(_SAMPLE_LQ, _SAMPLE_EDGES)
+        adj = result["adjacency"]
+        assert adj["2-3"] < adj["0-1"]
+
+    def test_max_weight_edge_is_in_routing(self):
+        result = build_curvature_adjacency(_SAMPLE_LQ, _SAMPLE_EDGES)
+        assert result["max_weight_edge"] == result["qem_routing"][0]
+
+    def test_empty_edges_returns_safe_defaults(self):
+        result = build_curvature_adjacency(_SAMPLE_LQ, {})
+        assert result["adjacency"] == {}
+        assert result["improvement_ratio"] == 1.0
+
+    def test_alpha_exponent_increases_penalty(self):
+        r1 = build_curvature_adjacency(_SAMPLE_LQ, _SAMPLE_EDGES, alpha=1.0)
+        r2 = build_curvature_adjacency(_SAMPLE_LQ, _SAMPLE_EDGES, alpha=2.0)
+        # Higher alpha = stronger fidelity penalty → lower avg weight
+        assert r2["avg_weight"] <= r1["avg_weight"]
+
+
+class TestCultivationPrescreener:
+    """Tests for cultivation_prescreener (arXiv:2512.13908)."""
+
+    def test_willow_is_marginal(self):
+        """Willow: lambda_q=0.73, p=2.3e-3 → MARGINAL (just below 0.75)."""
+        r = cultivation_prescreener(0.73, 2.3e-3, "google_willow")
+        assert r["zone"] == "MARGINAL"
+        assert not r["cultivation_ready"]
+
+    def test_above_threshold_is_ready(self):
+        """lambda_q=0.80, p=2.0e-3 → READY."""
+        r = cultivation_prescreener(0.80, 2.0e-3, "test_proc")
+        assert r["zone"] == "READY"
+        assert r["cultivation_ready"]
+        # Expected reduction should be >= 40x (Willow baseline)
+        assert r["expected_error_reduction"] >= 40.0
+
+    def test_high_lq_high_pnoise_is_threshold(self):
+        """Good lambda_q but bad p_noise → THRESHOLD zone."""
+        r = cultivation_prescreener(0.90, 5.0e-3, "noisy_high_lq")
+        assert r["zone"] == "THRESHOLD"
+        assert not r["cultivation_ready"]
+
+    def test_low_lq_is_below(self):
+        r = cultivation_prescreener(0.50, 1.5e-2, "bad_proc")
+        assert r["zone"] == "BELOW"
+
+    def test_lq_margin_sign(self):
+        r = cultivation_prescreener(0.80, 2.0e-3)
+        assert r["lambda_q_margin"] > 0  # above threshold
+
+    def test_willow_comparison_field(self):
+        r = cultivation_prescreener(0.73, 2.3e-3, "google_willow")
+        assert abs(r["willow_comparison"]) < 1e-9  # 0.73 - 0.73 == 0
+
+    def test_returns_all_keys(self):
+        r = cultivation_prescreener(0.75, 2.2e-3)
+        for key in ("zone", "cultivation_ready", "lambda_q_margin",
+                    "p_noise_margin", "expected_error_reduction",
+                    "recommendation", "willow_comparison"):
+            assert key in r
+
+
+class TestFloquetChecklist:
+    """Tests for floquet_deployment_checklist (Haah arXiv:2510.05549)."""
+
+    def test_clean_processor_passes(self):
+        """High-quality processor should pass all checks at d=3."""
+        lq = [1.05, 1.02, 0.98, 1.00, 0.95, 1.03]
+        grades = ["A", "A", "A", "A", "A", "A"]
+        edges = {
+            (0, 1): 1.5e-3, (1, 2): 1.8e-3, (2, 3): 2.0e-3,
+            (3, 4): 1.6e-3, (4, 5): 1.9e-3,
+        }
+        r = floquet_deployment_checklist(lq, grades, edges, target_distance=3)
+        assert r["floquet_ready"]
+        assert r["all_pass"]
+        assert r["pass_count"] == r["total_checks"]
+
+    def test_noisy_processor_fails(self):
+        """Low-quality processor should fail checks."""
+        lq = [0.40, 0.35, 0.50, 0.30]
+        grades = ["F", "F", "C", "F"]
+        edges = {(0, 1): 1.5e-2, (1, 2): 2.0e-2, (2, 3): 1.8e-2}
+        r = floquet_deployment_checklist(lq, grades, edges, target_distance=3)
+        assert not r["floquet_ready"]
+        assert r["pass_count"] < r["total_checks"]
+
+    def test_distance_enforced_odd(self):
+        """Even target_distance should be bumped to next odd."""
+        lq = [1.0] * 4
+        grades = ["A"] * 4
+        edges = {(0, 1): 1.0e-3, (1, 2): 1.0e-3, (2, 3): 1.0e-3}
+        r = floquet_deployment_checklist(lq, grades, edges, target_distance=4)
+        assert r["target_distance"] % 2 == 1  # must be odd
+
+    def test_isolated_f_detected(self):
+        """An F qubit with only F neighbours should be flagged."""
+        lq = [0.90, 0.30, 0.88, 0.85]
+        grades = ["A", "F", "A", "A"]
+        # Connected: 0-1 (F qubit 1 connected to A qubit 0 → NOT isolated)
+        edges = {(0, 1): 1.0e-3, (2, 3): 1.0e-3}
+        r = floquet_deployment_checklist(lq, grades, edges, target_distance=3)
+        # Qubit 1 has A neighbour (qubit 0), so not isolated
+        check3 = next(c for c in r["checklist"] if "isolated" in c["check"])
+        assert check3["value"] == 0  # no isolated F qubits
+
+    def test_checklist_has_four_items(self):
+        lq = [0.90, 0.85]
+        grades = ["A", "A"]
+        edges = {(0, 1): 1.0e-3}
+        r = floquet_deployment_checklist(lq, grades, edges)
+        assert r["total_checks"] == 4
+
+    def test_recommended_distance_at_least_3(self):
+        lq = [1.0] * 10
+        grades = ["A"] * 10
+        edges = {(i, i + 1): 1.0e-3 for i in range(9)}
+        r = floquet_deployment_checklist(lq, grades, edges)
+        assert r["recommended_distance"] >= 3
+
+
+class TestFullExtensionReport:
+    """Integration test for full_extension_report."""
+
+    def test_returns_three_sections(self):
+        r = full_extension_report(
+            qubit_lambda_q=_SAMPLE_LQ,
+            qubit_grades=_SAMPLE_GRADES,
+            edge_error_2q=_SAMPLE_EDGES,
+            processor_lambda_q=0.80,
+            processor_p_noise=2.0e-3,
+            processor_name="test",
+        )
+        assert "qem_adjacency" in r
+        assert "cultivation" in r
+        assert "floquet" in r
+
+    def test_version_export(self):
+        import lambda_q_profiler
+        assert lambda_q_profiler.__version__ == "1.1.1"
